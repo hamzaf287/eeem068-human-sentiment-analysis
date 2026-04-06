@@ -227,8 +227,11 @@ __pycache__/
 .venv/
 venv/
 
-data/raw/train_images/
-data/raw/dev_images/
-data/raw/test_images/
+data/raw/train_ende/
+data/raw/test/
+data/raw/dev/
+data/raw/anything_else/
+
+
 
 outputs/

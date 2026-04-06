@@ -11,7 +11,7 @@ ENDE_DIR = DATA_DIR / "ende"
 
 INDEX_FILE = ENDE_DIR / "image_index_test.txt"
 LABEL_FILE = ENDE_DIR / "sentiment_test.txt"
-TEST_IMG_DIR = DATA_DIR / "test_images"
+TEST_IMG_DIR = DATA_DIR / "test"
 
 
 def read_first_index_line(file_path: Path) -> list[int]:
