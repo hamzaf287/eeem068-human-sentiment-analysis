@@ -1,11 +1,10 @@
 from pathlib import Path
 
 import torch
-from torch.utils.data import DataLoader
-from torchvision import models
 
+from src.data.dataloaders import get_dataloaders
 from src.models.full_image_model import get_full_image_model
-from src.data.full_image_dataset import FullImageDataset
+
 
 def main():
     # 1. Select device
@@ -13,17 +12,16 @@ def main():
     print("Using device:", device)
 
     # 2. Load dataset
-    train_dataset = FullImageDataset(split="train")
-    train_loader = DataLoader(train_dataset, batch_size=8, shuffle=True)
+    project_root = Path(__file__).resolve().parents[2]
+    data_root = project_root / "data" / "raw"
+    train_loader, _, _ = get_dataloaders(data_root, batch_size=8, num_workers=0)
 
     # 3. Load pretrained model
-    model = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
-    model.fc = torch.nn.Linear(model.fc.in_features, 3)
-    model = model.to(device)
+    model = get_full_image_model().to(device)
 
     # 4. Define loss and optimizer
     criterion = torch.nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    optimizer = torch.optim.Adam(model.fc.parameters(), lr=0.001)
 
     # 5. Training mode
     model.train()
