@@ -8,7 +8,7 @@ DATA_DIR = BASE_DIR / "data" / "raw"
 
 def main():
 
-    train_loader, dev_loader, test_loader = get_dataloaders(DATA_DIR)
+    train_loader, dev_loader, test_loader = get_dataloaders(DATA_DIR, num_workers=0)
 
     print("Train samples:", len(train_loader.dataset))
     print("Dev samples:", len(dev_loader.dataset))
