@@ -24,9 +24,11 @@ class MSCTDDataset(Dataset):
 
         # image folders
         if split == "train":
-            self.image_dir = self.data_root / "train_ende"
+            self.image_dir = self.data_root / "train_images"
+        elif split == "dev":
+            self.image_dir = self.data_root / "dev_images"
         else:
-            self.image_dir = self.data_root / "test"
+            self.image_dir = self.data_root / "test_images"
 
         self.image_indices = self._load_indices()
         self.labels = self._load_labels()
