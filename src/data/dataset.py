@@ -23,10 +23,16 @@ class MSCTDDataset(Dataset):
         self.label_file = ende_dir / f"sentiment_{split}.txt"
 
         # image folders
-        if split == "train":
-            self.image_dir = self.data_root / "train_ende"
-        else:
-            self.image_dir = self.data_root / "test"
+        image_dirs = {
+            "train": self.data_root / "train_images",
+            "dev": self.data_root / "dev_images",
+            "test": self.data_root / "test_images",
+        }
+
+        if split not in image_dirs:
+            raise ValueError(f"Unsupported split: {split}")
+
+        self.image_dir = image_dirs[split]
 
         self.image_indices = self._load_indices()
         self.labels = self._load_labels()
