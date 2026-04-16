@@ -14,7 +14,13 @@ from src.data.dataloaders import get_dataloaders
 from src.models.full_image_model import get_full_image_model
 
 
-CLASS_NAMES = ["negative", "neutral", "positive"]
+LABEL_TO_NAME = {
+    0: "neutral",
+    1: "negative",
+    2: "positive",
+}
+CLASS_NAMES = [LABEL_TO_NAME[i] for i in sorted(LABEL_TO_NAME)]
+UNFREEZE_LAYER4 = True
 
 
 def evaluate(model, data_loader, criterion, device):
@@ -72,6 +78,18 @@ def save_confusion_matrix(cm, class_names, save_path):
     plt.close(fig)
 
 
+def configure_trainable_layers(model, unfreeze_layer4=False):
+    for param in model.parameters():
+        param.requires_grad = False
+
+    if unfreeze_layer4:
+        for param in model.layer4.parameters():
+            param.requires_grad = True
+
+    for param in model.fc.parameters():
+        param.requires_grad = True
+
+
 def train():
     # 1. Device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -93,18 +111,10 @@ def train():
 
     # 4. Model
     model = get_full_image_model().to(device)
+    configure_trainable_layers(model, unfreeze_layer4=UNFREEZE_LAYER4)
 
-    # Freeze everything first
-    for param in model.parameters():
-        param.requires_grad = False
-
-    # Unfreeze last ResNet block
-    for param in model.layer4.parameters():
-        param.requires_grad = True
-
-    # Unfreeze classifier
-    for param in model.fc.parameters():
-        param.requires_grad = True
+    training_mode = "classifier + layer4" if UNFREEZE_LAYER4 else "classifier only"
+    print("Training mode:", training_mode)
 
     print("\nTrainable parameters:")
     for name, param in model.named_parameters():
@@ -128,17 +138,22 @@ def train():
         weight = total / (num_classes * class_counts[i])
         class_weights.append(weight)
 
+    class_weights[2] *= 1.2
+    print("Applied positive class weight boost: x1.2")
+
     class_weights = torch.tensor(class_weights, dtype=torch.float).to(device)
     print("Class weights:", class_weights)
 
     # 6. Loss and optimizer
     criterion = torch.nn.CrossEntropyLoss(weight=class_weights)
-    trainable_params = list(model.layer4.parameters()) + list(model.fc.parameters())
+    trainable_params = list(model.fc.parameters())
+    if UNFREEZE_LAYER4:
+        trainable_params = list(model.layer4.parameters()) + trainable_params
     optimizer = torch.optim.Adam(trainable_params, lr=0.0001)
 
     # 7. Config
     num_epochs = 10
-    best_val_acc = 0.0
+    best_val_macro_f1 = 0.0
     patience = 3
     no_improve_epochs = 0
 
@@ -189,10 +204,13 @@ def train():
         print(f"Val Acc: {val_acc:.4f}")
         print(f"Val Macro F1: {val_macro_f1:.4f}")
 
-        if val_acc > best_val_acc:
-            best_val_acc = val_acc
+        if val_macro_f1 > best_val_macro_f1:
+            best_val_macro_f1 = val_macro_f1
             torch.save(model.state_dict(), checkpoint_path)
-            print(f"Saved best model to {checkpoint_path.name}")
+            print(
+                f"Saved best model to {checkpoint_path.name} "
+                f"(val_macro_f1={val_macro_f1:.4f}, val_acc={val_acc:.4f})"
+            )
             no_improve_epochs = 0
         else:
             no_improve_epochs += 1
@@ -202,7 +220,7 @@ def train():
             break
 
     print("\nTraining complete!")
-    print(f"Best Validation Accuracy: {best_val_acc:.4f}")
+    print(f"Best Validation Macro F1: {best_val_macro_f1:.4f}")
 
     print("\nTraining history:")
     for i in range(len(history["train_loss"])):
@@ -216,13 +234,7 @@ def train():
 
     # 9. Final test evaluation using best model
     best_model = get_full_image_model().to(device)
-
-    for param in best_model.parameters():
-        param.requires_grad = False
-    for param in best_model.layer4.parameters():
-        param.requires_grad = True
-    for param in best_model.fc.parameters():
-        param.requires_grad = True
+    configure_trainable_layers(best_model, unfreeze_layer4=UNFREEZE_LAYER4)
 
     best_model.load_state_dict(torch.load(checkpoint_path, map_location=device))
 
@@ -239,7 +251,7 @@ def train():
     print(f"Test Macro F1: {test_macro_f1:.4f}")
 
     # 10. Confusion matrix
-    cm = confusion_matrix(test_labels, test_preds)
+    cm = confusion_matrix(test_labels, test_preds, labels=sorted(LABEL_TO_NAME))
     print("\nConfusion Matrix:")
     print(cm)
 
@@ -250,6 +262,7 @@ def train():
     report = classification_report(
         test_labels,
         test_preds,
+        labels=sorted(LABEL_TO_NAME),
         target_names=CLASS_NAMES,
         digits=4,
         zero_division=0,

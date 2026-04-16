@@ -6,7 +6,10 @@ IMAGE_SIZE = 224
 
 def get_train_transforms():
     return transforms.Compose([
-        transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
+        transforms.RandomResizedCrop(
+            IMAGE_SIZE,
+            scale=(0.8, 1.0),
+        ),
 
         # small augmentation
         transforms.RandomHorizontalFlip(p=0.5),
