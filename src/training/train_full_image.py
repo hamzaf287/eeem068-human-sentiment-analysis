@@ -1,61 +1,268 @@
 from pathlib import Path
+from collections import Counter
 
+import matplotlib.pyplot as plt
 import torch
+from sklearn.metrics import (
+    accuracy_score,
+    classification_report,
+    confusion_matrix,
+    f1_score,
+)
 
 from src.data.dataloaders import get_dataloaders
 from src.models.full_image_model import get_full_image_model
 
 
-def main():
-    # 1. Select device
+CLASS_NAMES = ["negative", "neutral", "positive"]
+
+
+def evaluate(model, data_loader, criterion, device):
+    model.eval()
+
+    total_loss = 0.0
+    all_labels = []
+    all_preds = []
+
+    with torch.no_grad():
+        for images, labels in data_loader:
+            images = images.to(device)
+            labels = labels.to(device)
+
+            outputs = model(images)
+            loss = criterion(outputs, labels)
+
+            total_loss += loss.item()
+
+            preds = torch.argmax(outputs, dim=1)
+
+            all_labels.extend(labels.cpu().tolist())
+            all_preds.extend(preds.cpu().tolist())
+
+    avg_loss = total_loss / len(data_loader)
+    acc = accuracy_score(all_labels, all_preds)
+    macro_f1 = f1_score(all_labels, all_preds, average="macro")
+
+    return avg_loss, acc, macro_f1, all_labels, all_preds
+
+
+def save_confusion_matrix(cm, class_names, save_path):
+    fig, ax = plt.subplots(figsize=(6, 5))
+    im = ax.imshow(cm, interpolation="nearest")
+    fig.colorbar(im)
+
+    ax.set(
+        xticks=range(len(class_names)),
+        yticks=range(len(class_names)),
+        xticklabels=class_names,
+        yticklabels=class_names,
+        xlabel="Predicted label",
+        ylabel="True label",
+        title="Confusion Matrix",
+    )
+
+    plt.setp(ax.get_xticklabels(), rotation=45, ha="right", rotation_mode="anchor")
+
+    for i in range(cm.shape[0]):
+        for j in range(cm.shape[1]):
+            ax.text(j, i, str(cm[i, j]), ha="center", va="center")
+
+    fig.tight_layout()
+    plt.savefig(save_path, bbox_inches="tight")
+    plt.close(fig)
+
+
+def train():
+    # 1. Device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("Using device:", device)
 
-    # 2. Load dataset
+    # 2. Paths
     project_root = Path(__file__).resolve().parents[2]
     data_root = project_root / "data" / "raw"
-    train_loader, _, _ = get_dataloaders(data_root, batch_size=8, num_workers=0)
+    checkpoint_path = project_root / "best_full_image_model.pth"
+    confusion_matrix_path = project_root / "full_image_confusion_matrix.png"
+    report_path = project_root / "full_image_classification_report.txt"
 
-    # 3. Load pretrained model
+    # 3. Data
+    train_loader, dev_loader, test_loader = get_dataloaders(
+        data_root=data_root,
+        batch_size=8,
+        num_workers=0,
+    )
+
+    # 4. Model
     model = get_full_image_model().to(device)
 
-    # 4. Define loss and optimizer
-    criterion = torch.nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.fc.parameters(), lr=0.001)
+    # Freeze everything first
+    for param in model.parameters():
+        param.requires_grad = False
 
-    # 5. Training mode
-    model.train()
+    # Unfreeze last ResNet block
+    for param in model.layer4.parameters():
+        param.requires_grad = True
 
-    running_loss = 0.0
+    # Unfreeze classifier
+    for param in model.fc.parameters():
+        param.requires_grad = True
 
-    # 6. Train for 1 epoch
-    for batch_idx, (images, labels) in enumerate(train_loader):
-        images = images.to(device)
-        labels = labels.to(device)
+    print("\nTrainable parameters:")
+    for name, param in model.named_parameters():
+        if param.requires_grad:
+            print(name)
 
-        # clear old gradients
-        optimizer.zero_grad()
+    # 5. Compute class weights from training labels
+    all_train_labels = []
 
-        # forward pass
-        outputs = model(images)
+    for _, labels in train_loader:
+        all_train_labels.extend(labels.tolist())
 
-        # compute loss
-        loss = criterion(outputs, labels)
+    class_counts = Counter(all_train_labels)
+    print("Class counts:", class_counts)
 
-        # backward pass
-        loss.backward()
+    total = sum(class_counts.values())
+    num_classes = len(CLASS_NAMES)
 
-        # update weights
-        optimizer.step()
+    class_weights = []
+    for i in range(num_classes):
+        weight = total / (num_classes * class_counts[i])
+        class_weights.append(weight)
 
-        running_loss += loss.item()
+    class_weights = torch.tensor(class_weights, dtype=torch.float).to(device)
+    print("Class weights:", class_weights)
 
-        if batch_idx % 20 == 0:
-            print(f"Batch {batch_idx}/{len(train_loader)} - Loss: {loss.item():.4f}")
+    # 6. Loss and optimizer
+    criterion = torch.nn.CrossEntropyLoss(weight=class_weights)
+    trainable_params = list(model.layer4.parameters()) + list(model.fc.parameters())
+    optimizer = torch.optim.Adam(trainable_params, lr=0.0001)
 
-    avg_loss = running_loss / len(train_loader)
-    print(f"Training finished. Average loss: {avg_loss:.4f}")
+    # 7. Config
+    num_epochs = 10
+    best_val_acc = 0.0
+    patience = 3
+    no_improve_epochs = 0
+
+    history = {
+        "train_loss": [],
+        "val_loss": [],
+        "val_acc": [],
+        "val_macro_f1": [],
+    }
+
+    # 8. Training loop
+    for epoch in range(num_epochs):
+        print(f"\nEpoch {epoch + 1}/{num_epochs}")
+
+        model.train()
+        running_train_loss = 0.0
+
+        for images, labels in train_loader:
+            images = images.to(device)
+            labels = labels.to(device)
+
+            optimizer.zero_grad()
+
+            outputs = model(images)
+            loss = criterion(outputs, labels)
+
+            loss.backward()
+            optimizer.step()
+
+            running_train_loss += loss.item()
+
+        avg_train_loss = running_train_loss / len(train_loader)
+
+        val_loss, val_acc, val_macro_f1, _, _ = evaluate(
+            model=model,
+            data_loader=dev_loader,
+            criterion=criterion,
+            device=device,
+        )
+
+        history["train_loss"].append(avg_train_loss)
+        history["val_loss"].append(val_loss)
+        history["val_acc"].append(val_acc)
+        history["val_macro_f1"].append(val_macro_f1)
+
+        print(f"Train Loss: {avg_train_loss:.4f}")
+        print(f"Val Loss: {val_loss:.4f}")
+        print(f"Val Acc: {val_acc:.4f}")
+        print(f"Val Macro F1: {val_macro_f1:.4f}")
+
+        if val_acc > best_val_acc:
+            best_val_acc = val_acc
+            torch.save(model.state_dict(), checkpoint_path)
+            print(f"Saved best model to {checkpoint_path.name}")
+            no_improve_epochs = 0
+        else:
+            no_improve_epochs += 1
+
+        if no_improve_epochs >= patience:
+            print("Early stopping triggered")
+            break
+
+    print("\nTraining complete!")
+    print(f"Best Validation Accuracy: {best_val_acc:.4f}")
+
+    print("\nTraining history:")
+    for i in range(len(history["train_loss"])):
+        print(
+            f"Epoch {i + 1}: "
+            f"train_loss={history['train_loss'][i]:.4f}, "
+            f"val_loss={history['val_loss'][i]:.4f}, "
+            f"val_acc={history['val_acc'][i]:.4f}, "
+            f"val_macro_f1={history['val_macro_f1'][i]:.4f}"
+        )
+
+    # 9. Final test evaluation using best model
+    best_model = get_full_image_model().to(device)
+
+    for param in best_model.parameters():
+        param.requires_grad = False
+    for param in best_model.layer4.parameters():
+        param.requires_grad = True
+    for param in best_model.fc.parameters():
+        param.requires_grad = True
+
+    best_model.load_state_dict(torch.load(checkpoint_path, map_location=device))
+
+    test_loss, test_acc, test_macro_f1, test_labels, test_preds = evaluate(
+        model=best_model,
+        data_loader=test_loader,
+        criterion=criterion,
+        device=device,
+    )
+
+    print("\nBest model test results:")
+    print(f"Test Loss: {test_loss:.4f}")
+    print(f"Test Acc: {test_acc:.4f}")
+    print(f"Test Macro F1: {test_macro_f1:.4f}")
+
+    # 10. Confusion matrix
+    cm = confusion_matrix(test_labels, test_preds)
+    print("\nConfusion Matrix:")
+    print(cm)
+
+    save_confusion_matrix(cm, CLASS_NAMES, confusion_matrix_path)
+    print(f"Saved confusion matrix to {confusion_matrix_path.name}")
+
+    # 11. Classification report
+    report = classification_report(
+        test_labels,
+        test_preds,
+        target_names=CLASS_NAMES,
+        digits=4,
+        zero_division=0,
+    )
+
+    print("\nClassification Report:")
+    print(report)
+
+    with open(report_path, "w", encoding="utf-8") as f:
+        f.write(report)
+
+    print(f"Saved classification report to {report_path.name}")
 
 
 if __name__ == "__main__":
-    main()
+    train()
