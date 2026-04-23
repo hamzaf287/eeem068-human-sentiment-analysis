@@ -87,30 +87,30 @@ If this script runs without errors, your local setup is ready.
 
 1. Activate environment:
 
-	```bash
-	source venv/bin/activate
-	```
+   ```bash
+   source venv/bin/activate
+   ```
 
-	On Windows:
+   On Windows:
 
-	```bat
-	venv\Scripts\activate
-	```
+   ```bat
+   venv\Scripts\activate
+   ```
 
 2. Pull latest changes:
 
-	```bash
-	git pull
-	```
+   ```bash
+   git pull
+   ```
 
 3. Do your work.
 4. Commit and push:
 
-	```bash
-	git add .
-	git commit -m "meaningful message"
-	git push
-	```
+   ```bash
+   git add .
+   git commit -m "meaningful message"
+   git push
+   ```
 
 ## 7. Team rules
 
@@ -123,3 +123,10 @@ If this script runs without errors, your local setup is ready.
 - `python` command not found: try `python3`.
 - Dependency install fails: upgrade pip first with `python -m pip install --upgrade pip`.
 - `data_check.py` fails: re-check file paths and image naming format.
+
+## 9. Executing the train_full_image, train_face_model (MAC)
+
+- ' source venv/bin/activate
+  (venv) (base) syedmubeen@syeds-MacBook-Air-2 eeem068-human-sentiment-analysis % python -m src.training.train_full_image'
+
+- ' python -m src.training.train_face_model '
