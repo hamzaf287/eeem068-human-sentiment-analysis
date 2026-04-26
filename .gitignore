@@ -235,3 +235,17 @@ data/raw/anything_else/
 
 
 outputs/
+full_image_confusion_matrix.png
+best_full_image_model.pth
+.gitignore
+full_image_classification_report.txt
+
+# model files
+*.pth
+
+# generated outputs
+*.png
+*.txt
+
+# optionally logs
+*.log
