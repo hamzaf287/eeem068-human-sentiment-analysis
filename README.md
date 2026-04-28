@@ -1,4 +1,6 @@
 # EEEM068 Human Sentiment Analysis
+Keep Going!
+
 
 Group project for EEEM068 Applied Machine Learning.
 
