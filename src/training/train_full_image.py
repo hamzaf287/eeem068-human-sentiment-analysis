@@ -19,8 +19,10 @@ LABEL_TO_NAME = {
     1: "negative",
     2: "positive",
 }
-CLASS_NAMES = [LABEL_TO_NAME[i] for i in sorted(LABEL_TO_NAME)]
+CLASS_LABELS = sorted(LABEL_TO_NAME)
+CLASS_NAMES = [LABEL_TO_NAME[i] for i in CLASS_LABELS]
 UNFREEZE_LAYER4 = True
+POSITIVE_LABEL = 2
 POSITIVE_WEIGHT_BOOST = 1.2
 
 
@@ -146,11 +148,12 @@ def train():
     num_classes = len(CLASS_NAMES)
 
     class_weights = []
-    for i in range(num_classes):
-        weight = total / (num_classes * class_counts[i])
+    for label_id in CLASS_LABELS:
+        weight = total / (num_classes * class_counts[label_id])
         class_weights.append(weight)
 
-    class_weights[2] *= POSITIVE_WEIGHT_BOOST
+    positive_class_index = CLASS_LABELS.index(POSITIVE_LABEL)
+    class_weights[positive_class_index] *= POSITIVE_WEIGHT_BOOST
     print(f"Applied positive class weight boost: x{POSITIVE_WEIGHT_BOOST}")
 
     class_weights = torch.tensor(class_weights, dtype=torch.float).to(device)
