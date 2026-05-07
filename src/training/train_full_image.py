@@ -9,6 +9,8 @@ from sklearn.metrics import (
     confusion_matrix,
     f1_score,
 )
+torch.backends.mps.is_available()
+device = torch.device("mps")
 
 from src.data.dataloaders import get_dataloaders
 from src.models.full_image_model import get_full_image_model
@@ -21,6 +23,8 @@ LABEL_TO_NAME = {
 }
 CLASS_NAMES = [LABEL_TO_NAME[i] for i in sorted(LABEL_TO_NAME)]
 UNFREEZE_LAYER4 = True
+POSITIVE_WEIGHT_BOOST = 1.2
+
 
 
 def evaluate(model, data_loader, criterion, device):
@@ -92,8 +96,8 @@ def configure_trainable_layers(model, unfreeze_layer4=False):
 
 def train():
     # 1. Device
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print("Using device:", device)
+    torch.backends.mps.is_available()
+    device = torch.device("mps")
 
     # 2. Paths
     project_root = Path(__file__).resolve().parents[2]
@@ -138,8 +142,8 @@ def train():
         weight = total / (num_classes * class_counts[i])
         class_weights.append(weight)
 
-    class_weights[2] *= 1.2
-    print("Applied positive class weight boost: x1.2")
+    class_weights[2] *= POSITIVE_WEIGHT_BOOST
+    print(f"Applied positive class weight boost: x{POSITIVE_WEIGHT_BOOST}")
 
     class_weights = torch.tensor(class_weights, dtype=torch.float).to(device)
     print("Class weights:", class_weights)
@@ -152,7 +156,7 @@ def train():
     optimizer = torch.optim.Adam(trainable_params, lr=0.0001)
 
     # 7. Config
-    num_epochs = 10
+    num_epochs = 20
     best_val_macro_f1 = 0.0
     patience = 3
     no_improve_epochs = 0
