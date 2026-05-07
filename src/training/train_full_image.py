@@ -9,8 +9,6 @@ from sklearn.metrics import (
     confusion_matrix,
     f1_score,
 )
-torch.backends.mps.is_available()
-device = torch.device("mps")
 
 from src.data.dataloaders import get_dataloaders
 from src.models.full_image_model import get_full_image_model
@@ -25,6 +23,16 @@ CLASS_NAMES = [LABEL_TO_NAME[i] for i in sorted(LABEL_TO_NAME)]
 UNFREEZE_LAYER4 = True
 POSITIVE_WEIGHT_BOOST = 1.2
 
+
+def get_device():
+    mps_backend = getattr(torch.backends, "mps", None)
+    if mps_backend is not None and mps_backend.is_available():
+        return torch.device("mps")
+
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+
+    return torch.device("cpu")
 
 
 def evaluate(model, data_loader, criterion, device):
@@ -96,8 +104,8 @@ def configure_trainable_layers(model, unfreeze_layer4=False):
 
 def train():
     # 1. Device
-    torch.backends.mps.is_available()
-    device = torch.device("mps")
+    device = get_device()
+    print("Using device:", device)
 
     # 2. Paths
     project_root = Path(__file__).resolve().parents[2]
