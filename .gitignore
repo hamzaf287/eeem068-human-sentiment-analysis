@@ -249,3 +249,8 @@ full_image_classification_report.txt
 
 # optionally logs
 *.log
+
+face_train_images
+dev_images
+face_dev_images
+face_test_images
