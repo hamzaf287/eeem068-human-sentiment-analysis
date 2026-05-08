@@ -264,3 +264,7 @@ fusion_classification_report.txt
 text_predictions.csv
 text_confusion_matrix.png
 text_classification_report.txt
+multimodal_fusion_predictions.csv
+multimodal_fusion_weight_search_results.csv
+multimodal_fusion_confusion_matrix.png
+multimodal_fusion_classification_report.txt
