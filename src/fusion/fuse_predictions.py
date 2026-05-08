@@ -1,6 +1,9 @@
 import csv
 from pathlib import Path
 
+import matplotlib
+
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from sklearn.metrics import (
     accuracy_score,
@@ -39,9 +42,9 @@ def get_weights(face_count):
         return 1.0, 0.0
 
     if face_count == 1:
-        return 0.65, 0.35
+        return 0.75, 0.25
 
-    return 0.55, 0.45
+    return 0.70, 0.30
 
 
 def as_probs(row, columns):
