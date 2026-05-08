@@ -41,6 +41,21 @@ pip install -r requirements.txt
 
 ## 4. Add the Dataset
 
+## Dataset Download
+
+Dataset source:  
+https://github.com/XL2248/MSCTD/tree/main/MSCTD_data
+
+For this project, use the **En-De** subset.
+
+Download the text/metadata files from the `ende` folder in the dataset repo.
+
+Download image files from Google Drive:
+
+- Train images: https://drive.google.com/file/d/1GAZgPpTUBSfhne-Tp0GDkvSHuq6EMMbj/view?usp=sharing
+- Dev images: https://drive.google.com/file/d/12HM8uVNjFg-HRZ15ADue4oLGFAYQwvTA/view?usp=sharing
+- Test images: https://drive.google.com/file/d/1B9ZFmSTqfTMaqJ15nQDrRNLqBvo-B39W/view?usp=sharing
+
 Metadata files should be placed in:
 
 ```text
