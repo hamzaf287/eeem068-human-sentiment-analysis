@@ -1,4 +1,5 @@
 import csv
+import math
 from pathlib import Path
 
 import torch
@@ -27,16 +28,17 @@ class FaceExtractor:
         except Exception as exc:
             raise RuntimeError(f"Failed to open image file: {image_path}") from exc
 
-        boxes, _ = self.mtcnn.detect(img)
+        boxes, probs = self.mtcnn.detect(img)
         face_count = 0 if boxes is None else len(boxes)
 
         if face_count > 0:
-            largest_box = max(boxes, key=lambda box: (box[2] - box[0]) * (box[3] - box[1]))
-            x1, y1, x2, y2 = [int(coord) for coord in largest_box]
+            selected_index = self._select_face_index(boxes, probs)
+            selected_box = boxes[selected_index]
+            x1, y1, x2, y2 = [int(coord) for coord in selected_box]
             x1, y1 = max(0, x1), max(0, y1)
             x2, y2 = min(img.width, x2), min(img.height, y2)
             crop = img.crop((x1, y1, x2, y2))
-            used_strategy = "largest_face"
+            used_strategy = "detected_face" if face_count == 1 else "largest_face"
         else:
             crop = self._center_crop(img, target_size)
             used_strategy = "center_crop_no_face"
@@ -53,6 +55,29 @@ class FaceExtractor:
             "had_face": face_count > 0,
             "used_strategy": used_strategy,
         }
+
+    @staticmethod
+    def _select_face_index(boxes, probs):
+        def score(index):
+            x1, y1, x2, y2 = boxes[index]
+            width = max(0.0, float(x2 - x1))
+            height = max(0.0, float(y2 - y1))
+            area = width * height
+            confidence = FaceExtractor._get_confidence(probs, index)
+            return area, confidence
+
+        return max(range(len(boxes)), key=score)
+
+    @staticmethod
+    def _get_confidence(probs, index):
+        if probs is None or index >= len(probs) or probs[index] is None:
+            return 0.0
+
+        confidence = float(probs[index])
+        if math.isnan(confidence):
+            return 0.0
+
+        return confidence
 
     @staticmethod
     def _center_crop(img, target_size):
