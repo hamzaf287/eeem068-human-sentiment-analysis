@@ -242,6 +242,7 @@ full_image_classification_report.txt
 
 # model files
 *.pth
+*.joblib
 
 # generated outputs
 *.png
@@ -260,3 +261,6 @@ fusion_predictions.csv
 fusion_weight_search_results.csv
 fusion_confusion_matrix.png
 fusion_classification_report.txt
+text_predictions.csv
+text_confusion_matrix.png
+text_classification_report.txt
