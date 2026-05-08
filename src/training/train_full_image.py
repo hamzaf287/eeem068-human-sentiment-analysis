@@ -19,8 +19,28 @@ LABEL_TO_NAME = {
     1: "negative",
     2: "positive",
 }
-CLASS_NAMES = [LABEL_TO_NAME[i] for i in sorted(LABEL_TO_NAME)]
-UNFREEZE_LAYER4 = True
+CLASS_LABELS = sorted(LABEL_TO_NAME)
+CLASS_NAMES = [LABEL_TO_NAME[i] for i in CLASS_LABELS]
+POSITIVE_LABEL = 2
+
+# Quick daytime run defaults. For overnight/full training, use:
+# BATCH_SIZE = 32 if stable, NUM_EPOCHS = 20, PATIENCE = 3.
+BATCH_SIZE = 32
+NUM_EPOCHS = 5
+PATIENCE = 2
+UNFREEZE_LAYER4 = False
+POSITIVE_WEIGHT_BOOST = 1.0
+
+
+def get_device():
+    mps_backend = getattr(torch.backends, "mps", None)
+    if mps_backend is not None and mps_backend.is_available():
+        return torch.device("mps")
+
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+
+    return torch.device("cpu")
 
 
 def evaluate(model, data_loader, criterion, device):
@@ -78,6 +98,28 @@ def save_confusion_matrix(cm, class_names, save_path):
     plt.close(fig)
 
 
+def save_training_history(history, save_path):
+    epochs = range(1, len(history["train_loss"]) + 1)
+
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4))
+
+    axes[0].plot(epochs, history["train_loss"], label="train")
+    axes[0].plot(epochs, history["val_loss"], label="validation")
+    axes[0].set_title("Loss")
+    axes[0].set_xlabel("Epoch")
+    axes[0].legend()
+
+    axes[1].plot(epochs, history["val_acc"], label="accuracy")
+    axes[1].plot(epochs, history["val_macro_f1"], label="macro F1")
+    axes[1].set_title("Validation Metrics")
+    axes[1].set_xlabel("Epoch")
+    axes[1].legend()
+
+    fig.tight_layout()
+    fig.savefig(save_path, bbox_inches="tight")
+    plt.close(fig)
+
+
 def configure_trainable_layers(model, unfreeze_layer4=False):
     for param in model.parameters():
         param.requires_grad = False
@@ -90,10 +132,24 @@ def configure_trainable_layers(model, unfreeze_layer4=False):
         param.requires_grad = True
 
 
+def print_dataset_summary(name, dataset):
+    diagnostics = dataset.get_diagnostics()
+    print(
+        f"{name} samples: {diagnostics['usable_samples']} "
+        f"(missing images: {diagnostics['missing_images']})"
+    )
+
+
 def train():
     # 1. Device
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = get_device()
     print("Using device:", device)
+    print(
+        "Training config: "
+        f"batch_size={BATCH_SIZE}, epochs={NUM_EPOCHS}, patience={PATIENCE}, "
+        f"unfreeze_layer4={UNFREEZE_LAYER4}, "
+        f"positive_weight_boost={POSITIVE_WEIGHT_BOOST}"
+    )
 
     # 2. Paths
     project_root = Path(__file__).resolve().parents[2]
@@ -101,13 +157,18 @@ def train():
     checkpoint_path = project_root / "best_full_image_model.pth"
     confusion_matrix_path = project_root / "full_image_confusion_matrix.png"
     report_path = project_root / "full_image_classification_report.txt"
+    history_path = project_root / "full_image_training_history.png"
 
     # 3. Data
     train_loader, dev_loader, test_loader = get_dataloaders(
         data_root=data_root,
-        batch_size=8,
+        batch_size=BATCH_SIZE,
         num_workers=0,
     )
+
+    print_dataset_summary("Train", train_loader.dataset)
+    print_dataset_summary("Dev", dev_loader.dataset)
+    print_dataset_summary("Test", test_loader.dataset)
 
     # 4. Model
     model = get_full_image_model().to(device)
@@ -122,24 +183,20 @@ def train():
             print(name)
 
     # 5. Compute class weights from training labels
-    all_train_labels = []
-
-    for _, labels in train_loader:
-        all_train_labels.extend(labels.tolist())
-
-    class_counts = Counter(all_train_labels)
+    class_counts = Counter(train_loader.dataset.sample_labels)
     print("Class counts:", class_counts)
 
     total = sum(class_counts.values())
     num_classes = len(CLASS_NAMES)
 
     class_weights = []
-    for i in range(num_classes):
-        weight = total / (num_classes * class_counts[i])
+    for label_id in CLASS_LABELS:
+        weight = total / (num_classes * class_counts[label_id])
         class_weights.append(weight)
 
-    class_weights[2] *= 1.2
-    print("Applied positive class weight boost: x1.2")
+    positive_class_index = CLASS_LABELS.index(POSITIVE_LABEL)
+    class_weights[positive_class_index] *= POSITIVE_WEIGHT_BOOST
+    print(f"Applied positive class weight boost: x{POSITIVE_WEIGHT_BOOST}")
 
     class_weights = torch.tensor(class_weights, dtype=torch.float).to(device)
     print("Class weights:", class_weights)
@@ -151,10 +208,8 @@ def train():
         trainable_params = list(model.layer4.parameters()) + trainable_params
     optimizer = torch.optim.Adam(trainable_params, lr=0.0001)
 
-    # 7. Config
-    num_epochs = 10
-    best_val_macro_f1 = 0.0
-    patience = 3
+    # 7. Training state
+    best_val_macro_f1 = -1.0
     no_improve_epochs = 0
 
     history = {
@@ -165,8 +220,8 @@ def train():
     }
 
     # 8. Training loop
-    for epoch in range(num_epochs):
-        print(f"\nEpoch {epoch + 1}/{num_epochs}")
+    for epoch in range(NUM_EPOCHS):
+        print(f"\nEpoch {epoch + 1}/{NUM_EPOCHS}")
 
         model.train()
         running_train_loss = 0.0
@@ -215,7 +270,7 @@ def train():
         else:
             no_improve_epochs += 1
 
-        if no_improve_epochs >= patience:
+        if no_improve_epochs >= PATIENCE:
             print("Early stopping triggered")
             break
 
@@ -231,6 +286,9 @@ def train():
             f"val_acc={history['val_acc'][i]:.4f}, "
             f"val_macro_f1={history['val_macro_f1'][i]:.4f}"
         )
+
+    save_training_history(history, history_path)
+    print(f"Saved training history to {history_path.name}")
 
     # 9. Final test evaluation using best model
     best_model = get_full_image_model().to(device)

@@ -1,8 +1,15 @@
 from pathlib import Path
-import ast
+from collections import Counter
 
 from PIL import Image
 from torch.utils.data import Dataset
+
+
+IMAGE_DIRS = {
+    "train": "train_images",
+    "dev": "dev_images",
+    "test": "test_images",
+}
 
 
 class MSCTDDataset(Dataset):
@@ -19,46 +26,33 @@ class MSCTDDataset(Dataset):
 
         ende_dir = self.data_root / "ende"
 
+        # Kept for future dialogue/text-fusion work; full-image training uses image IDs directly.
         self.index_file = ende_dir / f"image_index_{split}.txt"
         self.label_file = ende_dir / f"sentiment_{split}.txt"
 
-        # image folders
-        image_dirs = {
-            "train": self.data_root / "train_images",
-            "dev": self.data_root / "dev_images",
-            "test": self.data_root / "test_images",
-        }
-
-        if split not in image_dirs:
+        if split not in IMAGE_DIRS:
             raise ValueError(f"Unsupported split: {split}")
 
-        self.image_dir = image_dirs[split]
-
-        self.image_indices = self._load_indices()
+        self.image_dir = self.data_root / IMAGE_DIRS[split]
         self.labels = self._load_labels()
+        self.image_file_count = self._count_image_files()
+        self.samples, self.missing_image_paths = self._build_samples()
+        self.sample_labels = [label for _, label in self.samples]
+        self.label_distribution = Counter(self.sample_labels)
+        self.diagnostics = {
+            "split": self.split,
+            "label_lines": len(self.labels),
+            "image_files": self.image_file_count,
+            "usable_samples": len(self.samples),
+            "missing_images": len(self.missing_image_paths),
+            "label_distribution": dict(sorted(self.label_distribution.items())),
+        }
 
-        min_len = min(len(self.labels), len(self.image_indices))
-
-        self.labels = self.labels[:min_len]
-        self.image_indices = self.image_indices[:min_len]
-
-        
-
-    def _load_indices(self):
-        indices = []
-
-        with open(self.index_file, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-
-                try:
-                    parsed = ast.literal_eval(line)
-                except Exception:
-                    parsed = []
-
-                indices.append(parsed)
-
-        return indices
+        if not self.samples:
+            raise ValueError(
+                f"No usable samples found for split '{self.split}'. "
+                f"Checked image directory: {self.image_dir}"
+            )
 
     def _load_labels(self):
         labels = []
@@ -69,33 +63,44 @@ class MSCTDDataset(Dataset):
 
         return labels
 
+    def _count_image_files(self):
+        return sum(1 for _ in self.image_dir.glob("*.jpg"))
+
+    def _build_samples(self):
+        samples = []
+        missing_image_paths = []
+
+        for image_id, label in enumerate(self.labels):
+            img_path = self.image_dir / f"{image_id}.jpg"
+
+            if img_path.exists():
+                samples.append((img_path, label))
+            else:
+                missing_image_paths.append(img_path)
+
+        return samples, missing_image_paths
+
+    def get_diagnostics(self):
+        return {
+            **self.diagnostics,
+            "missing_image_paths": [str(path) for path in self.missing_image_paths],
+        }
+
     def __len__(self):
-        return min(len(self.labels), len(self.image_indices))
+        return len(self.samples)
 
-    def _load_image(self, index_list):
-
-        if not index_list:
-            return Image.new("RGB", (224, 224))
-
-        image_id = index_list[0]
-        img_path = self.image_dir / f"{image_id}.jpg"
-
-        if not img_path.exists():
-            return Image.new("RGB", (224, 224))
-
+    def _load_image(self, img_path):
         try:
-            img = Image.open(img_path).convert("RGB")
-        except Exception:
-            img = Image.new("RGB", (224, 224))
-
-        return img
+            with Image.open(img_path) as img:
+                return img.convert("RGB")
+        except Exception as exc:
+            raise RuntimeError(f"Failed to open image file: {img_path}") from exc
 
     def __getitem__(self, idx):
 
-        label = self.labels[idx]
-        index_list = self.image_indices[idx]
+        img_path, label = self.samples[idx]
 
-        img = self._load_image(index_list)
+        img = self._load_image(img_path)
 
         if self.transform:
             img = self.transform(img)

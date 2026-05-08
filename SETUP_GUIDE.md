@@ -69,10 +69,18 @@ Expected naming format:
 
 ## 5. Verify your setup
 
-Run:
+Run from the project root.
+
+macOS / Linux:
 
 ```bash
-python src/data_check.py
+python3 -m src.data_check
+```
+
+Windows:
+
+```powershell
+python -m src.data_check
 ```
 
 Expected behavior:
@@ -83,7 +91,26 @@ Expected behavior:
 
 If this script runs without errors, your local setup is ready.
 
-## 6. Daily workflow
+## 6. Run the training script
+
+Run training from the project root using module mode.
+
+macOS / Linux:
+
+```bash
+python3 -m src.training.train_full_image
+```
+
+Windows:
+
+```powershell
+python -m src.training.train_full_image
+```
+
+This avoids `ModuleNotFoundError: No module named 'src'` by making Python load the
+project as a package.
+
+## 7. Daily workflow
 
 1. Activate environment:
 
@@ -112,14 +139,15 @@ If this script runs without errors, your local setup is ready.
 	git push
 	```
 
-## 7. Team rules
+## 8. Team rules
 
 - Do not upload dataset images to GitHub.
 - Always work inside the virtual environment.
 - Use clear and meaningful commit messages.
 
-## 8. Quick troubleshooting
+## 9. Quick troubleshooting
 
 - `python` command not found: try `python3`.
 - Dependency install fails: upgrade pip first with `python -m pip install --upgrade pip`.
+- `No module named 'src'`: run scripts from the repository root with `python3 -m ...` on macOS/Linux or `python -m ...` on Windows.
 - `data_check.py` fails: re-check file paths and image naming format.
