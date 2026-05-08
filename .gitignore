@@ -249,3 +249,8 @@ full_image_classification_report.txt
 
 # optionally logs
 *.log
+
+data/raw/face_train_images/
+data/raw/face_dev_images/
+data/raw/face_test_images/
+data/raw/face_metadata_*.csv

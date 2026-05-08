@@ -91,11 +91,11 @@ Expected behavior:
 
 If this script runs without errors, your local setup is ready.
 
-## 6. Run the training script
+## 6. Run training scripts
 
-Run training from the project root using module mode.
+Run scripts from the project root using module mode.
 
-macOS / Linux:
+### Full-image model
 
 ```bash
 python3 -m src.training.train_full_image
@@ -107,6 +107,32 @@ Windows:
 python -m src.training.train_full_image
 ```
 
+### Face model
+
+Generate face crops before training the face model:
+
+```bash
+python3 -m src.face.face_detection
+```
+
+Windows:
+
+```powershell
+python -m src.face.face_detection
+```
+
+Then train the face model:
+
+```bash
+python3 -m src.training.train_face_model
+```
+
+Windows:
+
+```powershell
+python -m src.training.train_face_model
+```
+
 This avoids `ModuleNotFoundError: No module named 'src'` by making Python load the
 project as a package.
 
@@ -114,30 +140,30 @@ project as a package.
 
 1. Activate environment:
 
-	```bash
-	source venv/bin/activate
-	```
+   ```bash
+   source venv/bin/activate
+   ```
 
-	On Windows:
+   On Windows:
 
-	```bat
-	venv\Scripts\activate
-	```
+   ```bat
+   venv\Scripts\activate
+   ```
 
 2. Pull latest changes:
 
-	```bash
-	git pull
-	```
+   ```bash
+   git pull
+   ```
 
 3. Do your work.
 4. Commit and push:
 
-	```bash
-	git add .
-	git commit -m "meaningful message"
-	git push
-	```
+   ```bash
+   git add .
+   git commit -m "meaningful message"
+   git push
+   ```
 
 ## 8. Team rules
 
@@ -151,3 +177,4 @@ project as a package.
 - Dependency install fails: upgrade pip first with `python -m pip install --upgrade pip`.
 - `No module named 'src'`: run scripts from the repository root with `python3 -m ...` on macOS/Linux or `python -m ...` on Windows.
 - `data_check.py` fails: re-check file paths and image naming format.
+- `train_face_model.py` says face crops are missing: run `python3 -m src.face.face_detection` first.
