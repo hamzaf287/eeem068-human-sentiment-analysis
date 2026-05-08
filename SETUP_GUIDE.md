@@ -1,180 +1,245 @@
-# Setup Guide (For Group Members)
+# Setup Guide
 
-This guide helps you run the project locally and avoid common setup issues.
+This guide explains how to run the project locally from a clean checkout.
 
-## 1. Clone the repository
+## 1. Clone the Repository
 
 ```bash
 git clone https://github.com/hamzaf287/eeem068-human-sentiment-analysis.git
 cd eeem068-human-sentiment-analysis
 ```
 
-## 2. Create and activate a virtual environment
+## 2. Create a Virtual Environment
 
-Use a virtual environment so everyone uses isolated dependencies.
-
-### macOS / Linux
+macOS/Linux:
 
 ```bash
 python3 -m venv venv
 source venv/bin/activate
 ```
 
-### Windows (PowerShell)
+Windows PowerShell:
 
 ```powershell
 python -m venv venv
 venv\Scripts\Activate.ps1
 ```
 
-### Windows (Command Prompt)
+Windows Command Prompt:
 
 ```bat
 python -m venv venv
 venv\Scripts\activate
 ```
 
-## 3. Install dependencies
+## 3. Install Dependencies
 
 ```bash
+python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-## 4. Place the dataset correctly
+## 4. Add the Dataset
 
-### Metadata files
+Metadata files should be placed in:
 
-Put all metadata text files in:
+```text
+data/raw/ende/
+```
 
-`data/raw/ende/`
+Required files:
 
-Required patterns:
+```text
+english_train.txt
+english_dev.txt
+english_test.txt
+german_train.txt
+german_dev.txt
+german_test.txt
+sentiment_train.txt
+sentiment_dev.txt
+sentiment_test.txt
+image_index_train.txt
+image_index_dev.txt
+image_index_test.txt
+```
 
-- `english_*.txt`
-- `german_*.txt`
-- `image_index_*.txt`
-- `sentiment_*.txt`
+Images should be placed in:
 
-### Image files
+```text
+data/raw/train_images/
+data/raw/dev_images/
+data/raw/test_images/
+```
 
-Put images into:
+Image filenames should use the sample ID format:
 
-- `data/raw/train_images/`
-- `data/raw/dev_images/`
-- `data/raw/test_images/`
+```text
+0.jpg
+1.jpg
+2.jpg
+...
+```
 
-Expected naming format:
+## 5. Verify the Data Pipeline
 
-- `0.jpg`, `1.jpg`, `2.jpg`, ...
+Run from the repository root:
 
-## 5. Verify your setup
-
-Run from the project root.
-
-macOS / Linux:
+macOS/Linux:
 
 ```bash
-python3 -m src.data_check
+PYTHONPATH=. python3 -m src.data.test_dataset
 ```
 
 Windows:
 
 ```powershell
-python -m src.data_check
+$env:PYTHONPATH="."
+python -m src.data.test_dataset
 ```
 
 Expected behavior:
 
-- Prints sample indices
-- Prints sentiment label
-- Confirms referenced image file exists
+- Reports train/dev/test dataset sizes
+- Prints class distributions
+- Loads one image batch successfully
 
-If this script runs without errors, your local setup is ready.
+Expected dataset sizes are approximately:
 
-## 6. Run training scripts
+```text
+train: 20240
+dev:   5063
+test:  5067
+```
 
-Run scripts from the project root using module mode.
+## 6. Train and Evaluate Models
 
-### Full-image model
+Run all commands from the repository root.
+
+### Full-Image Model
+
+macOS/Linux:
 
 ```bash
-python3 -m src.training.train_full_image
+PYTHONPATH=. python3 -m src.training.train_full_image
 ```
 
 Windows:
 
 ```powershell
+$env:PYTHONPATH="."
 python -m src.training.train_full_image
 ```
 
-### Face model
+### Face Extraction
 
 Generate face crops before training the face model:
 
+macOS/Linux:
+
 ```bash
-python3 -m src.face.face_detection
+PYTHONPATH=. python3 -m src.face.face_detection
 ```
 
 Windows:
 
 ```powershell
+$env:PYTHONPATH="."
 python -m src.face.face_detection
 ```
 
-Then train the face model:
+The face extraction step saves generated crops and metadata under `data/raw/`.
+
+### Face Model
+
+macOS/Linux:
 
 ```bash
-python3 -m src.training.train_face_model
+PYTHONPATH=. python3 -m src.training.train_face_model
 ```
 
 Windows:
 
 ```powershell
+$env:PYTHONPATH="."
 python -m src.training.train_face_model
 ```
 
-This avoids `ModuleNotFoundError: No module named 'src'` by making Python load the
-project as a package.
+### Image+Face Fusion
 
-## 7. Daily workflow
+Export prediction probabilities:
 
-1. Activate environment:
+```bash
+PYTHONPATH=. python3 -m src.fusion.export_full_image_predictions
+PYTHONPATH=. python3 -m src.fusion.export_face_predictions
+```
 
-   ```bash
-   source venv/bin/activate
-   ```
+Run fusion:
 
-   On Windows:
+```bash
+PYTHONPATH=. python3 -m src.fusion.fuse_predictions
+```
 
-   ```bat
-   venv\Scripts\activate
-   ```
+Optional fusion weight search:
 
-2. Pull latest changes:
+```bash
+PYTHONPATH=. python3 -m src.fusion.tune_fusion_weights
+```
 
-   ```bash
-   git pull
-   ```
+On Windows, use `python -m ...` after setting `$env:PYTHONPATH="."`.
 
-3. Do your work.
-4. Commit and push:
+### Text Model
 
-   ```bash
-   git add .
-   git commit -m "meaningful message"
-   git push
-   ```
+Train the frozen DistilBERT text model:
 
-## 8. Team rules
+```bash
+PYTHONPATH=. python3 -m src.text.train_text_model
+```
 
-- Do not upload dataset images to GitHub.
-- Always work inside the virtual environment.
-- Use clear and meaningful commit messages.
+On Windows:
 
-## 9. Quick troubleshooting
+```powershell
+$env:PYTHONPATH="."
+python -m src.text.train_text_model
+```
 
-- `python` command not found: try `python3`.
-- Dependency install fails: upgrade pip first with `python -m pip install --upgrade pip`.
-- `No module named 'src'`: run scripts from the repository root with `python3 -m ...` on macOS/Linux or `python -m ...` on Windows.
-- `data_check.py` fails: re-check file paths and image naming format.
-- `train_face_model.py` says face crops are missing: run `python3 -m src.face.face_detection` first.
+### Text+Image+Face Multimodal Fusion
+
+Run final multimodal fusion:
+
+```bash
+PYTHONPATH=. python3 -m src.fusion.fuse_text_multimodal_predictions
+```
+
+Optional text-heavy fusion weight search:
+
+```bash
+PYTHONPATH=. python3 -m src.fusion.tune_text_multimodal_fusion
+```
+
+On Windows, use `python -m ...` after setting `$env:PYTHONPATH="."`.
+
+## 7. Generated Files
+
+Do not commit generated files such as:
+
+- model checkpoints
+- prediction CSVs
+- confusion matrix images
+- classification reports
+- training history plots
+- face crop folders
+- face metadata CSVs
+- logs
+- cached embeddings
+
+These are ignored by `.gitignore`.
+
+## 8. Troubleshooting
+
+- `python3` not found on Windows: use `python`.
+- `python` not found on macOS/Linux: use `python3`.
+- `No module named 'src'`: run from the repository root and set `PYTHONPATH=.`.
+- Face training says crops are missing: run `python -m src.face.face_detection` first.
+- DistilBERT download fails: check internet access or whether the model is already cached locally.
+- Matplotlib cache issues: set `MPLCONFIGDIR=/private/tmp` on macOS/Linux if needed.
