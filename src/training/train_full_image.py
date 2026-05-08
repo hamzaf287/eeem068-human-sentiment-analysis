@@ -23,11 +23,11 @@ CLASS_LABELS = sorted(LABEL_TO_NAME)
 CLASS_NAMES = [LABEL_TO_NAME[i] for i in CLASS_LABELS]
 POSITIVE_LABEL = 2
 
-# Quick daytime run defaults. For overnight/full training, use:
-# BATCH_SIZE = 32 if stable, NUM_EPOCHS = 20, PATIENCE = 3.
+# Overnight/full training defaults.
+# For quick daytime debugging, use: BATCH_SIZE = 32, NUM_EPOCHS = 5, PATIENCE = 2.
 BATCH_SIZE = 32
-NUM_EPOCHS = 5
-PATIENCE = 2
+NUM_EPOCHS = 20
+PATIENCE = 3
 UNFREEZE_LAYER4 = False
 POSITIVE_WEIGHT_BOOST = 1.0
 
