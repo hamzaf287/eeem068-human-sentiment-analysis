@@ -1,6 +1,6 @@
 # EEEM068 Human Sentiment Analysis
 
-Group coursework project for **EEEM068 Applied Machine Learning**.
+This is group coursework project for **EEEM068 Applied Machine Learning**.
 
 This repository implements sentiment classification for the **MSCTD English-German (En-De) subset**. The final system includes image, face, text, and late-fusion pipelines for three sentiment classes:
 
@@ -227,5 +227,5 @@ Important generated examples:
 *_training_history.png
 outputs/
 data/raw/face_*_images/
-data/raw/face_metadata_*.csv
+data/raw/face_metadata_*.csv 
 ```
